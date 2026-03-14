@@ -2,7 +2,7 @@
 Data-Access Object layer for the auth module.
 
 Every function in this module:
-  - Accepts an ``asyncpg.Pool`` as its first argument.
+  - Accepts an ``asyncpg.Connection`` as its first argument.
   - Executes a **raw, parameterised** SQL query (``$1``, ``$2`` …).
   - Returns plain ``dict`` objects (or ``None``) – no business logic.
   - Never raises HTTP exceptions – that responsibility belongs to the
@@ -18,7 +18,7 @@ import asyncpg
 
 
 async def insert_user(
-    pool: asyncpg.Pool,
+    conn: asyncpg.Connection,
     email: str,
     hashed_password: str,
 ) -> dict:
@@ -32,32 +32,29 @@ async def insert_user(
         VALUES ($1, $2)
         RETURNING id, email, created_at
     """
-    async with pool.acquire() as conn:
-        row = await conn.fetchrow(query, email, hashed_password)
+    row = await conn.fetchrow(query, email, hashed_password)
     return dict(row)
 
 
-async def find_user_by_email(pool: asyncpg.Pool, email: str) -> dict | None:
+async def find_user_by_email(conn: asyncpg.Connection, email: str) -> dict | None:
     """Return the full user record (including hashed password) or ``None``."""
     query = """
         SELECT id, email, password, created_at
         FROM users
         WHERE email = $1
     """
-    async with pool.acquire() as conn:
-        row = await conn.fetchrow(query, email)
+    row = await conn.fetchrow(query, email)
     return dict(row) if row else None
 
 
-async def find_user_by_id(pool: asyncpg.Pool, user_id: int) -> dict | None:
+async def find_user_by_id(conn: asyncpg.Connection, user_id: int) -> dict | None:
     """Return a user record *without* the password hash, or ``None``."""
     query = """
         SELECT id, email, created_at
         FROM users
         WHERE id = $1
     """
-    async with pool.acquire() as conn:
-        row = await conn.fetchrow(query, user_id)
+    row = await conn.fetchrow(query, user_id)
     return dict(row) if row else None
 
 
@@ -65,7 +62,7 @@ async def find_user_by_id(pool: asyncpg.Pool, user_id: int) -> dict | None:
 
 
 async def insert_refresh_token(
-    pool: asyncpg.Pool,
+    conn: asyncpg.Connection,
     user_id: int,
     token_jti: str,
     expires_at: datetime,
@@ -76,12 +73,11 @@ async def insert_refresh_token(
         INSERT INTO refresh_tokens (user_id, token_jti, expires_at)
         VALUES ($1, $2, $3)
     """
-    async with pool.acquire() as conn:
-        await conn.execute(query, user_id, token_jti, expires_at)
+    await conn.execute(query, user_id, token_jti, expires_at)
 
 
 async def find_refresh_token(
-    pool: asyncpg.Pool,
+    conn: asyncpg.Connection,
     token_jti: str,
 ) -> dict | None:
     """Return the refresh-token row if it exists and has **not** been
@@ -91,24 +87,22 @@ async def find_refresh_token(
         FROM refresh_tokens
         WHERE token_jti = $1 AND revoked = FALSE
     """
-    async with pool.acquire() as conn:
-        row = await conn.fetchrow(query, token_jti)
+    row = await conn.fetchrow(query, token_jti)
     return dict(row) if row else None
 
 
-async def revoke_refresh_token(pool: asyncpg.Pool, token_jti: str) -> None:
+async def revoke_refresh_token(conn: asyncpg.Connection, token_jti: str) -> None:
     """Mark a single refresh token as revoked."""
     query = """
         UPDATE refresh_tokens
         SET revoked = TRUE
         WHERE token_jti = $1
     """
-    async with pool.acquire() as conn:
-        await conn.execute(query, token_jti)
+    await conn.execute(query, token_jti)
 
 
 async def revoke_all_user_refresh_tokens(
-    pool: asyncpg.Pool,
+    conn: asyncpg.Connection,
     user_id: int,
 ) -> None:
     """Revoke every active refresh token belonging to *user_id*.
@@ -120,5 +114,4 @@ async def revoke_all_user_refresh_tokens(
         SET revoked = TRUE
         WHERE user_id = $1 AND revoked = FALSE
     """
-    async with pool.acquire() as conn:
-        await conn.execute(query, user_id)
+    await conn.execute(query, user_id)

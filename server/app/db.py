@@ -1,3 +1,4 @@
+from collections.abc import AsyncGenerator
 from pathlib import Path
 
 import asyncpg
@@ -12,6 +13,23 @@ async def get_pool() -> asyncpg.Pool:
     if _pool is None:
         raise RuntimeError("Database pool is not initialised. Call init_db() first.")
     return _pool
+
+
+async def get_connection(
+    pool: asyncpg.Pool = None,  # noqa: RUF013 – injected by FastAPI at runtime
+) -> AsyncGenerator[asyncpg.Connection, None]:
+    """FastAPI dependency that yields a single connection for the request.
+
+    The connection is acquired from the pool at the start of the request
+    and released back when the request finishes.  FastAPI deduplicates
+    dependencies, so every layer (router, ``get_current_user``, service,
+    DAO) that declares ``Depends(get_connection)`` within the same request
+    receives the **same** connection instance.
+    """
+    if pool is None:
+        pool = await get_pool()
+    async with pool.acquire() as conn:
+        yield conn
 
 
 async def init_db() -> None:
