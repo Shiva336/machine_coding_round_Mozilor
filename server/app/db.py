@@ -2,6 +2,7 @@ from collections.abc import AsyncGenerator
 from pathlib import Path
 
 import asyncpg
+from fastapi import Depends
 
 from app.config import settings
 
@@ -16,7 +17,7 @@ async def get_pool() -> asyncpg.Pool:
 
 
 async def get_connection(
-    pool: asyncpg.Pool = None,  # noqa: RUF013 – injected by FastAPI at runtime
+    pool: asyncpg.Pool = Depends(get_pool),
 ) -> AsyncGenerator[asyncpg.Connection, None]:
     """FastAPI dependency that yields a single connection for the request.
 
@@ -26,8 +27,6 @@ async def get_connection(
     DAO) that declares ``Depends(get_connection)`` within the same request
     receives the **same** connection instance.
     """
-    if pool is None:
-        pool = await get_pool()
     async with pool.acquire() as conn:
         yield conn
 
