@@ -17,14 +17,14 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from app.auth import dao
 from app.auth.security import decode_token
-from app.db import get_pool
+from app.db import get_connection
 
 _bearer_scheme = HTTPBearer()
 
 
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(_bearer_scheme),
-    pool: asyncpg.Pool = Depends(get_pool),
+    conn: asyncpg.Connection = Depends(get_connection),
 ) -> dict:
     """Dependency that resolves the authenticated user from the JWT.
 
@@ -57,7 +57,7 @@ async def get_current_user(
         )
 
     user_id = int(payload["sub"])
-    user = await dao.find_user_by_id(pool, user_id)
+    user = await dao.find_user_by_id(conn, user_id)
 
     if user is None:
         raise HTTPException(
