@@ -1,8 +1,7 @@
+import Navigator from "./navigator";
+
 function App() {
-  return (
-    <>
-    </>
-  )
+  return <Navigator />;
 }
 
-export default App
+export default App;
