@@ -8,6 +8,11 @@ It owns:
   - HTTP error semantics (raises ``HTTPException`` with appropriate codes).
 
 It does **not** touch raw SQL – that is delegated entirely to the DAO.
+
+Every public function receives the database ``pool`` as its first argument
+(injected by the router via ``Depends(get_pool)``).  This keeps
+dependencies explicit and makes the service easy to unit-test with a mock
+pool.
 """
 
 from datetime import datetime, timezone
@@ -23,10 +28,9 @@ from app.auth.security import (
     hash_password,
     verify_password,
 )
-from app.db import get_pool
 
 
-# ── Helpers ───────────────────────────────────────────────────────────
+# Helpers 
 
 
 async def _generate_and_store_tokens(
@@ -46,16 +50,14 @@ async def _generate_and_store_tokens(
     }
 
 
-# ── Public API ────────────────────────────────────────────────────────
+# Helpers
 
-
-async def register_user(email: str, password: str) -> dict:
+async def register_user(pool: asyncpg.Pool, email: str, password: str) -> dict:
     """Register a new user and return an initial token pair.
 
     Raises:
         HTTPException 409: if the e-mail is already registered.
     """
-    pool = await get_pool()
     hashed = hash_password(password)
 
     try:
@@ -70,14 +72,13 @@ async def register_user(email: str, password: str) -> dict:
     return {"user": user, "tokens": tokens}
 
 
-async def login_user(email: str, password: str) -> dict:
+async def login_user(pool: asyncpg.Pool, email: str, password: str) -> dict:
     """Authenticate by e-mail + password and return a token pair.
 
     Raises:
         HTTPException 401: on invalid credentials (deliberately vague to
         prevent user-enumeration attacks).
     """
-    pool = await get_pool()
     user = await dao.find_user_by_email(pool, email)
 
     if user is None or not verify_password(password, user["password"]):
@@ -92,7 +93,7 @@ async def login_user(email: str, password: str) -> dict:
     return {"user": user_safe, "tokens": tokens}
 
 
-async def refresh_access_token(refresh_token_str: str) -> dict:
+async def refresh_access_token(pool: asyncpg.Pool, refresh_token_str: str) -> dict:
     """Validate and rotate a refresh token, issuing a new token pair.
 
     Implements **refresh-token rotation**: every refresh token is
@@ -102,8 +103,6 @@ async def refresh_access_token(refresh_token_str: str) -> dict:
         HTTPException 401: if the token is expired, invalid, revoked, or
         not of the ``refresh`` type.
     """
-    pool = await get_pool()
-
     # 1. Decode the JWT (checks signature + expiry).
     try:
         payload = decode_token(refresh_token_str)
@@ -149,15 +148,13 @@ async def refresh_access_token(refresh_token_str: str) -> dict:
     return await _generate_and_store_tokens(pool, user_id)
 
 
-async def logout_user(refresh_token_str: str) -> None:
+async def logout_user(pool: asyncpg.Pool, refresh_token_str: str) -> None:
     """Revoke the supplied refresh token.
 
     This endpoint is lenient: if the token is already revoked or invalid
     the call still succeeds (idempotent).  This avoids leaking token state
     to callers.
     """
-    pool = await get_pool()
-
     try:
         payload = decode_token(refresh_token_str)
     except Exception:
@@ -169,14 +166,13 @@ async def logout_user(refresh_token_str: str) -> None:
         await dao.revoke_refresh_token(pool, jti)
 
 
-async def get_current_user_profile(user_id: int) -> dict:
+async def get_current_user_profile(pool: asyncpg.Pool, user_id: int) -> dict:
     """Return the public profile of the user identified by *user_id*.
 
     Raises:
         HTTPException 401: if the user no longer exists (e.g. deleted
         after the token was issued).
     """
-    pool = await get_pool()
     user = await dao.find_user_by_id(pool, user_id)
     if user is None:
         raise HTTPException(

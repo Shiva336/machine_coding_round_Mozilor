@@ -10,6 +10,7 @@ should declare.  It:
   4. Returns the user ``dict`` – or raises a 401 if anything is wrong.
 """
 
+import asyncpg
 import jwt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -23,6 +24,7 @@ _bearer_scheme = HTTPBearer()
 
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(_bearer_scheme),
+    pool: asyncpg.Pool = Depends(get_pool),
 ) -> dict:
     """Dependency that resolves the authenticated user from the JWT.
 
@@ -55,7 +57,6 @@ async def get_current_user(
         )
 
     user_id = int(payload["sub"])
-    pool = await get_pool()
     user = await dao.find_user_by_id(pool, user_id)
 
     if user is None:
