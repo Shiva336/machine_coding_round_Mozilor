@@ -3,7 +3,7 @@ Auth router – thin HTTP layer.
 
 Each endpoint:
   - Deserialises the request body via Pydantic schemas.
-  - Receives the database pool via ``Depends(get_pool)``.
+  - Receives a database connection via ``Depends(get_connection)``.
   - Delegates **all** business logic to ``service.py``.
   - Returns a Pydantic response model.
 
@@ -24,7 +24,7 @@ from app.auth.schemas import (
     TokenResponse,
     UserResponse,
 )
-from app.db import get_pool
+from app.db import get_connection
 
 router = APIRouter(prefix="/api/auth", tags=["Auth"])
 
@@ -37,9 +37,9 @@ router = APIRouter(prefix="/api/auth", tags=["Auth"])
 )
 async def register(
     body: RegisterRequest,
-    pool: asyncpg.Pool = Depends(get_pool),
+    conn: asyncpg.Connection = Depends(get_connection),
 ):
-    result = await service.register_user(pool, body.email, body.password)
+    result = await service.register_user(conn, body.email, body.password)
     return result["tokens"]
 
 
@@ -50,9 +50,9 @@ async def register(
 )
 async def login(
     body: LoginRequest,
-    pool: asyncpg.Pool = Depends(get_pool),
+    conn: asyncpg.Connection = Depends(get_connection),
 ):
-    result = await service.login_user(pool, body.email, body.password)
+    result = await service.login_user(conn, body.email, body.password)
     return result["tokens"]
 
 
@@ -63,9 +63,9 @@ async def login(
 )
 async def refresh(
     body: RefreshRequest,
-    pool: asyncpg.Pool = Depends(get_pool),
+    conn: asyncpg.Connection = Depends(get_connection),
 ):
-    tokens = await service.refresh_access_token(pool, body.refresh_token)
+    tokens = await service.refresh_access_token(conn, body.refresh_token)
     return tokens
 
 
@@ -77,9 +77,9 @@ async def refresh(
 async def logout(
     body: LogoutRequest,
     _user: dict = Depends(get_current_user),
-    pool: asyncpg.Pool = Depends(get_pool),
+    conn: asyncpg.Connection = Depends(get_connection),
 ):
-    await service.logout_user(pool, body.refresh_token)
+    await service.logout_user(conn, body.refresh_token)
     return {"detail": "Successfully logged out."}
 
 
@@ -90,6 +90,6 @@ async def logout(
 )
 async def me(
     user: dict = Depends(get_current_user),
-    pool: asyncpg.Pool = Depends(get_pool),
+    conn: asyncpg.Connection = Depends(get_connection),
 ):
-    return await service.get_current_user_profile(pool, user["id"])
+    return await service.get_current_user_profile(conn, user["id"])
