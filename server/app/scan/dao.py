@@ -22,20 +22,68 @@ async def insert_scan(
     conn: asyncpg.Connection,
     user_id: int,
     url: str,
+) -> dict:
+    """Insert a new pending scan and return the created row.
+
+    The scan is created with ``status='pending'`` and zero image counts.
+    These are updated later by ``update_scan_results`` once the background
+    scrape completes.
+    """
+    query = """
+        INSERT INTO scans (user_id, url)
+        VALUES ($1, $2)
+        RETURNING id, user_id, url, total_images, images_with_alt,
+                  images_without_alt, status, error_message, scanned_at
+    """
+    row = await conn.fetchrow(query, user_id, url)
+    return dict(row)
+
+
+async def update_scan_results(
+    conn: asyncpg.Connection,
+    scan_id: int,
     total_images: int,
     images_with_alt: int,
     images_without_alt: int,
 ) -> dict:
-    """Insert a new scan record and return the created row."""
+    """Mark a scan as completed and fill in the image counts.
+
+    Called by the background task after successful scraping.
+    """
     query = """
-        INSERT INTO scans (user_id, url, total_images, images_with_alt, images_without_alt)
-        VALUES ($1, $2, $3, $4, $5)
+        UPDATE scans
+        SET total_images = $2,
+            images_with_alt = $3,
+            images_without_alt = $4,
+            status = 'completed'
+        WHERE id = $1
         RETURNING id, user_id, url, total_images, images_with_alt,
-                  images_without_alt, scanned_at
+                  images_without_alt, status, error_message, scanned_at
     """
     row = await conn.fetchrow(
-        query, user_id, url, total_images, images_with_alt, images_without_alt
+        query, scan_id, total_images, images_with_alt, images_without_alt
     )
+    return dict(row)
+
+
+async def update_scan_failed(
+    conn: asyncpg.Connection,
+    scan_id: int,
+    error_message: str,
+) -> dict:
+    """Mark a scan as failed and store the error message.
+
+    Called by the background task when scraping fails for any reason.
+    """
+    query = """
+        UPDATE scans
+        SET status = 'failed',
+            error_message = $2
+        WHERE id = $1
+        RETURNING id, user_id, url, total_images, images_with_alt,
+                  images_without_alt, status, error_message, scanned_at
+    """
+    row = await conn.fetchrow(query, scan_id, error_message)
     return dict(row)
 
 
@@ -48,7 +96,7 @@ async def get_scans_by_user(
     """Return a page of scans for *user_id*, newest first."""
     query = """
         SELECT id, user_id, url, total_images, images_with_alt,
-               images_without_alt, scanned_at
+               images_without_alt, status, error_message, scanned_at
         FROM scans
         WHERE user_id = $1
         ORDER BY scanned_at DESC
@@ -79,7 +127,7 @@ async def get_scan_by_id(
     """Return a single scan row, or ``None`` if it does not exist."""
     query = """
         SELECT id, user_id, url, total_images, images_with_alt,
-               images_without_alt, scanned_at
+               images_without_alt, status, error_message, scanned_at
         FROM scans
         WHERE id = $1
     """

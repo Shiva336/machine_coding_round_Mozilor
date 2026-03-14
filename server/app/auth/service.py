@@ -30,7 +30,7 @@ from app.auth.security import (
 )
 
 
-# ── Helpers ───────────────────────────────────────────────────────────
+# Helpers 
 
 
 async def _generate_and_store_tokens(
@@ -82,7 +82,7 @@ async def login_user(conn: asyncpg.Connection, email: str, password: str) -> dic
     """
     user = await dao.find_user_by_email(conn, email)
 
-    if user is None or not verify_password(password, user["password"]):
+    if user is None or not verify_password(password, user["password_hashed"]):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid credentials.",
@@ -90,7 +90,7 @@ async def login_user(conn: asyncpg.Connection, email: str, password: str) -> dic
 
     tokens = await _generate_and_store_tokens(conn, user["id"])
     # Strip the hashed password before returning the user object.
-    user_safe = {k: v for k, v in user.items() if k != "password"}
+    user_safe = {k: v for k, v in user.items() if k != "password_hashed"}
     return {"user": user_safe, "tokens": tokens}
 
 

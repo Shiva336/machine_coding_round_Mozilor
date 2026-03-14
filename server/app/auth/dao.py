@@ -14,7 +14,7 @@ from datetime import datetime
 import asyncpg
 
 
-# ── Users ─────────────────────────────────────────────────────────────
+# Users 
 
 
 async def insert_user(
@@ -28,7 +28,7 @@ async def insert_user(
     the service layer is expected to handle that.
     """
     query = """
-        INSERT INTO users (email, password)
+        INSERT INTO users (email, password_hashed)
         VALUES ($1, $2)
         RETURNING id, email, created_at
     """
@@ -39,7 +39,7 @@ async def insert_user(
 async def find_user_by_email(conn: asyncpg.Connection, email: str) -> dict | None:
     """Return the full user record (including hashed password) or ``None``."""
     query = """
-        SELECT id, email, password, created_at
+        SELECT id, email, password_hashed, created_at
         FROM users
         WHERE email = $1
     """
@@ -58,7 +58,7 @@ async def find_user_by_id(conn: asyncpg.Connection, user_id: int) -> dict | None
     return dict(row) if row else None
 
 
-# ── Refresh tokens ────────────────────────────────────────────────────
+# Refresh tokens
 
 
 async def insert_refresh_token(

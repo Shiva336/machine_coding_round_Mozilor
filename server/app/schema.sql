@@ -14,6 +14,8 @@ CREATE TABLE IF NOT EXISTS scans (
     total_images        INTEGER NOT NULL DEFAULT 0,
     images_with_alt     INTEGER NOT NULL DEFAULT 0,
     images_without_alt  INTEGER NOT NULL DEFAULT 0,
+    status              VARCHAR(20) NOT NULL DEFAULT 'pending',
+    error_message       TEXT,
     scanned_at          TIMESTAMPTZ DEFAULT NOW()
 );
 
