@@ -19,6 +19,17 @@ CREATE TABLE IF NOT EXISTS scans (
 
 CREATE INDEX IF NOT EXISTS idx_scans_user_id ON scans(user_id);
 
+-- Scan images  (individual image details per scan)
+CREATE TABLE IF NOT EXISTS scan_images (
+    id        SERIAL PRIMARY KEY,
+    scan_id   INTEGER NOT NULL REFERENCES scans(id) ON DELETE CASCADE,
+    src       TEXT NOT NULL,
+    alt       TEXT,
+    has_alt   BOOLEAN NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_scan_images_scan_id ON scan_images(scan_id);
+
 -- Refresh tokens  (for JWT refresh-token rotation)
 CREATE TABLE IF NOT EXISTS refresh_tokens (
     id          SERIAL PRIMARY KEY,
