@@ -30,7 +30,7 @@ from app.auth.security import (
 )
 
 
-# Helpers 
+# Helpers
 
 
 async def _generate_and_store_tokens(
@@ -38,7 +38,7 @@ async def _generate_and_store_tokens(
     user_id: int,
 ) -> dict:
     """Create an access + refresh token pair, persist the refresh token,
-    and return both tokens in a dict ready for the ``TokenResponse`` schema.
+    and return both tokens in a dict consumed by the router to set cookies.
     """
     access_token = create_access_token(user_id)
     refresh_token, jti, expires_at = create_refresh_token(user_id)
@@ -46,11 +46,10 @@ async def _generate_and_store_tokens(
     return {
         "access_token": access_token,
         "refresh_token": refresh_token,
-        "token_type": "bearer",
     }
 
 
-# ── Public API ────────────────────────────────────────────────────────
+# Public API 
 
 
 async def register_user(conn: asyncpg.Connection, email: str, password: str) -> dict:

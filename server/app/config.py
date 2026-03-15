@@ -25,6 +25,16 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = 30
     refresh_token_expire_days: int = 7
 
+    # Cookie settings
+    # cookie_secure: set to True in production (requires HTTPS).
+    #   False for local dev over plain HTTP – the browser refuses to store
+    #   Secure cookies on http://localhost.
+    # cookie_samesite: "lax" prevents cross-site POST CSRF while still
+    #   allowing normal navigation.  Sufficient for a same-origin SPA.
+    cookie_secure: bool = False
+    cookie_samesite: str = "lax"
+    cookie_httponly: bool = True
+
     # Derived helpers
     @property
     def database_url(self) -> str:

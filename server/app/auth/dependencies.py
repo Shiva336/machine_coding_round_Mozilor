@@ -4,35 +4,42 @@ FastAPI dependencies for the auth module.
 ``get_current_user`` is the single dependency that protected routes
 should declare.  It:
 
-  1. Extracts the ``Authorization: Bearer <token>`` header.
+  1. Reads the ``access_token`` HttpOnly cookie from the request.
   2. Decodes and validates the JWT (signature, expiry, type).
   3. Loads the corresponding user from the database.
   4. Returns the user ``dict`` – or raises a 401 if anything is wrong.
+
+Tokens are no longer carried in the ``Authorization`` header; they live
+exclusively in HttpOnly cookies that JavaScript cannot read, eliminating
+the XSS token-theft vector.
 """
 
 import asyncpg
 import jwt
-from fastapi import Depends, HTTPException, status
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from fastapi import Depends, HTTPException, Request, status
 
 from app.auth import dao
 from app.auth.security import decode_token
 from app.db import get_connection
 
-_bearer_scheme = HTTPBearer()
-
 
 async def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(_bearer_scheme),
+    request: Request,
     conn: asyncpg.Connection = Depends(get_connection),
 ) -> dict:
-    """Dependency that resolves the authenticated user from the JWT.
+    """Dependency that resolves the authenticated user from the JWT cookie.
 
     Raises:
-        HTTPException 401: if the token is missing, expired, invalid, or
-        does not correspond to an existing user.
+        HTTPException 401: if the cookie is missing, the token is expired
+        or invalid, or the user no longer exists in the database.
     """
-    token = credentials.credentials
+    token = request.cookies.get("access_token")
+
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated.",
+        )
 
     try:
         payload = decode_token(token)
@@ -40,20 +47,17 @@ async def get_current_user(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Access token has expired.",
-            headers={"WWW-Authenticate": "Bearer"},
         )
     except jwt.InvalidTokenError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid access token.",
-            headers={"WWW-Authenticate": "Bearer"},
         )
 
     if payload.get("type") != "access":
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid token type.",
-            headers={"WWW-Authenticate": "Bearer"},
         )
 
     user_id = int(payload["sub"])
@@ -63,7 +67,6 @@ async def get_current_user(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User not found.",
-            headers={"WWW-Authenticate": "Bearer"},
         )
 
     return user

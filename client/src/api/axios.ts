@@ -5,41 +5,38 @@ const API_BASE_URL = "http://localhost:8000";
 /**
  * Shared Axios instance with the API base URL pre-configured.
  *
- * - Request interceptor: attaches the access token from localStorage.
- * - Response interceptor: on 401, attempts a silent token refresh using the
- *   stored refresh token.  If the refresh succeeds the original request is
- *   retried transparently.  If the refresh fails, tokens are cleared and the
- *   user is redirected to /login.
+ * Tokens are stored in HttpOnly cookies and are therefore never accessible
+ * to JavaScript.  The browser attaches them automatically on every request
+ * because ``withCredentials: true`` is set.
+ *
+ * Response interceptor: on 401, attempts a silent token refresh by calling
+ * POST /api/auth/refresh (the refresh_token cookie is sent automatically).
+ * If the refresh succeeds, the original request is retried.  If it fails,
+ * the user is redirected to /login – the server already cleared the cookies
+ * via Set-Cookie on the failed refresh response.
  */
 const api = axios.create({
   baseURL: API_BASE_URL,
   headers: { "Content-Type": "application/json" },
-});
-
-// Request interceptor
-
-api.interceptors.request.use((config) => {
-  const token = localStorage.getItem("access_token");
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  return config;
+  // Required for cross-origin requests: tells the browser to include cookies
+  // and accept Set-Cookie headers from the API server.
+  withCredentials: true,
 });
 
 // Response interceptor (silent refresh)
 
 let isRefreshing = false;
 let pendingQueue: Array<{
-  resolve: (token: string) => void;
+  resolve: () => void;
   reject: (err: unknown) => void;
 }> = [];
 
-function processQueue(error: unknown, token: string | null) {
+function processQueue(error: unknown) {
   for (const { resolve, reject } of pendingQueue) {
-    if (token) {
-      resolve(token);
-    } else {
+    if (error) {
       reject(error);
+    } else {
+      resolve();
     }
   }
   pendingQueue = [];
@@ -62,41 +59,28 @@ api.interceptors.response.use(
       return Promise.reject(error);
     }
 
-    const refreshToken = localStorage.getItem("refresh_token");
-    if (!refreshToken) {
-      return Promise.reject(error);
-    }
-
     // If a refresh is already in flight, queue this request.
     if (isRefreshing) {
-      return new Promise<string>((resolve, reject) => {
+      return new Promise<void>((resolve, reject) => {
         pendingQueue.push({ resolve, reject });
-      }).then((newToken) => {
-        originalRequest.headers.Authorization = `Bearer ${newToken}`;
-        return api(originalRequest);
-      });
+      }).then(() => api(originalRequest));
     }
 
     originalRequest._retry = true;
     isRefreshing = true;
 
     try {
-      const { data } = await axios.post(`${API_BASE_URL}/api/auth/refresh`, {
-        refresh_token: refreshToken,
-      });
+      // POST /api/auth/refresh – refresh_token cookie sent automatically.
+      await api.post("/api/auth/refresh");
 
-      localStorage.setItem("access_token", data.access_token);
-      localStorage.setItem("refresh_token", data.refresh_token);
-
-      api.defaults.headers.common.Authorization = `Bearer ${data.access_token}`;
-      originalRequest.headers.Authorization = `Bearer ${data.access_token}`;
-
-      processQueue(null, data.access_token);
+      // New access_token cookie is now set by the server.  Retry all
+      // queued requests and the original one; cookies are attached by
+      // the browser automatically.
+      processQueue(null);
       return api(originalRequest);
     } catch (refreshError) {
-      processQueue(refreshError, null);
-      localStorage.removeItem("access_token");
-      localStorage.removeItem("refresh_token");
+      processQueue(refreshError);
+      // Server cleared the cookies on failure; redirect to login.
       window.location.href = "/login";
       return Promise.reject(refreshError);
     } finally {

@@ -53,21 +53,7 @@ class LoginRequest(BaseModel):
     password: str
 
 
-class RefreshRequest(BaseModel):
-    refresh_token: str
-
-
-class LogoutRequest(BaseModel):
-    refresh_token: str
-
-
-# Responses 
-
-
-class TokenResponse(BaseModel):
-    access_token: str
-    refresh_token: str
-    token_type: str = "bearer"
+# Responses
 
 
 class UserResponse(BaseModel):
@@ -76,6 +62,17 @@ class UserResponse(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class AuthResponse(BaseModel):
+    """Returned by login and register after cookies are set.
+
+    Tokens are delivered via HttpOnly cookies – the response body only
+    carries the user profile so the client can populate its auth state
+    without an extra /me round-trip.
+    """
+
+    user: UserResponse
 
 
 class MessageResponse(BaseModel):
