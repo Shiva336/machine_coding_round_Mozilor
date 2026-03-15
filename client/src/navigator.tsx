@@ -1,8 +1,10 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import { useAuth } from "./hooks/useAuth";
+import AppLayout from "./components/AppLayout";
 import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
 import DashboardPage from "./pages/DashboardPage";
+import ScanDetailPage from "./pages/ScanDetailPage";
 import type { ReactNode } from "react";
 
 // Route guards 
@@ -39,6 +41,7 @@ function ProtectedRoute({ children }: { children: ReactNode }) {
 export default function Navigator() {
   return (
     <Routes>
+      {/* Public routes */}
       <Route
         path="/login"
         element={
@@ -55,14 +58,18 @@ export default function Navigator() {
           </PublicRoute>
         }
       />
+
+      {/* Protected routes — all share the AppLayout (header + sidebar) */}
       <Route
-        path="/dashboard"
         element={
           <ProtectedRoute>
-            <DashboardPage />
+            <AppLayout />
           </ProtectedRoute>
         }
-      />
+      >
+        <Route path="/dashboard" element={<DashboardPage />} />
+        <Route path="/scans/:scanId" element={<ScanDetailPage />} />
+      </Route>
 
       {/* Catch-all: redirect unknown paths to the dashboard (which will
           itself redirect to /login if not authenticated). */}
