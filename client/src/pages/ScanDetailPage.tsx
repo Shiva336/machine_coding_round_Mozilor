@@ -143,7 +143,7 @@ export default function ScanDetailPage() {
             Scan results
           </h1>
           <p
-            className="mb-4 truncate text-sm text-gray-400"
+            className="mb-4 truncate text-sm text-gray-500"
             title={scan.url}
           >
             {scan.url}

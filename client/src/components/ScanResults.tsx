@@ -101,7 +101,7 @@ export default function ScanResults({ scan, isPolling }: ScanResultsProps) {
                           title={img.src}
                         >
                           {img.src || (
-                            <span className="italic text-gray-400">
+                            <span className="italic text-gray-500">
                               (no src)
                             </span>
                           )}
@@ -112,7 +112,7 @@ export default function ScanResults({ scan, isPolling }: ScanResultsProps) {
                       <td className="max-w-xs px-4 py-3">
                         {img.has_alt ? (
                           img.alt === "" ? (
-                            <span className="italic text-gray-400">
+                            <span className="italic text-gray-500">
                               (decorative)
                             </span>
                           ) : (
@@ -188,7 +188,7 @@ export default function ScanResults({ scan, isPolling }: ScanResultsProps) {
               </table>
             </div>
           ) : (
-            <p className="mt-4 text-sm text-gray-500">
+            <p className="mt-4 text-sm text-gray-600">
               No images were found on this page.
             </p>
           )}
@@ -300,7 +300,7 @@ function StatCard({
   return (
     <div className={`rounded-lg ${bgClass} p-3 text-center`}>
       <p className={`text-2xl font-bold ${colorClass}`}>{value}</p>
-      <p className="mt-0.5 text-xs text-gray-500">{label}</p>
+      <p className="mt-0.5 text-xs text-gray-600">{label}</p>
     </div>
   );
 }

@@ -229,7 +229,7 @@ export default function AppLayout() {
 
           {/* Right: user + sign out */}
           <div className="flex items-center gap-3">
-            <span className="hidden text-sm text-gray-500 sm:block">{user?.email}</span>
+            <span className="hidden text-sm text-gray-600 sm:block">{user?.email}</span>
             <button
               type="button"
               onClick={() => void handleLogout()}

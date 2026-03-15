@@ -136,21 +136,21 @@ function HistoryBar({ scans }: { scans: ScanSummary[] }) {
         role="img"
         aria-label="Grouped bar chart comparing images with and without alt text per scan"
       >
-        <ResponsiveContainer width="100%" height={220}>
+        <ResponsiveContainer width="100%" height={280}>
           <BarChart
             data={completed}
-            margin={{ top: 4, right: 8, left: -16, bottom: 4 }}
+            margin={{ top: 4, right: 8, left: -16, bottom: 24 }}
           >
             <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
             <XAxis
               dataKey="name"
-              tick={{ fontSize: 11, fill: "#6b7280" }}
+              tick={{ fontSize: 11, fill: "#4b5563" }}
               interval={0}
               angle={-20}
               textAnchor="end"
-              height={40}
+              height={52}
             />
-            <YAxis tick={{ fontSize: 11, fill: "#6b7280" }} allowDecimals={false} />
+            <YAxis tick={{ fontSize: 11, fill: "#4b5563" }} allowDecimals={false} />
             <Tooltip />
             <Legend
               formatter={(value: string) => (

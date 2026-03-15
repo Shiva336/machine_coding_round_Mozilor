@@ -58,7 +58,7 @@ export default function ScanHistory({
 
   if (scans.length === 0) {
     return (
-      <p className="py-8 text-center text-xs text-gray-400">
+      <p className="py-8 text-center text-xs text-gray-600">
         No scans yet.<br />Enter a URL on the dashboard to get started.
       </p>
     );
@@ -104,7 +104,7 @@ export default function ScanHistory({
 
                 {/* Date + status */}
                 <div className="mt-1 flex items-center justify-between gap-2">
-                  <span className="text-xs text-gray-400">
+                  <span className="text-xs text-gray-500">
                     {formatDate(scan.scanned_at)}
                   </span>
                   <StatusPill status={scan.status} />
@@ -145,7 +145,7 @@ export default function ScanHistory({
             ‹ Prev
           </button>
 
-          <span className="text-xs text-gray-400">
+          <span className="text-xs text-gray-500">
             {currentPage} / {totalPages}
           </span>
 
