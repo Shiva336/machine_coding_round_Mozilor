@@ -135,7 +135,7 @@ async def get_scan_by_id(
     return dict(row) if row else None
 
 
-# Scan images 
+# Scan images
 
 
 async def insert_scan_images(
@@ -158,6 +158,23 @@ async def insert_scan_images(
     """
     args = [(scan_id, img["src"], img["alt"], img["has_alt"]) for img in images]
     await conn.executemany(query, args)
+
+
+async def delete_scan(
+    conn: asyncpg.Connection,
+    scan_id: int,
+) -> bool:
+    """Delete a scan row by *scan_id*.
+
+    Associated ``scan_images`` rows are removed automatically by the
+    ``ON DELETE CASCADE`` foreign-key constraint defined in schema.sql.
+
+    Returns:
+        ``True`` if a row was deleted, ``False`` if no row matched.
+    """
+    query = "DELETE FROM scans WHERE id = $1 RETURNING id"
+    row = await conn.fetchrow(query, scan_id)
+    return row is not None
 
 
 async def get_scan_images(

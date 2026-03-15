@@ -47,3 +47,8 @@ export function getScanHistory(limit = 20, offset = 0) {
 export function getScanDetail(scanId: number) {
   return api.get<ScanDetail>(`/api/scans/${scanId}`);
 }
+
+/** Delete a scan and all its image records. */
+export function deleteScan(scanId: number) {
+  return api.delete(`/api/scans/${scanId}`);
+}

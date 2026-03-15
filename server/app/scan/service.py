@@ -29,7 +29,7 @@ from app.scan import dao
 
 logger = logging.getLogger(__name__)
 
-# Constants 
+# Constants
 
 _HTTPX_TIMEOUT = httpx.Timeout(connect=5.0, read=10.0, write=5.0, pool=5.0)
 _MAX_REDIRECTS = 5
@@ -37,7 +37,7 @@ _USER_AGENT = "MozilorAltChecker/1.0 (accessibility scanner)"
 _MAX_RESPONSE_BYTES = 10 * 1024 * 1024  # 10 MB
 
 
-# Public API (called by the router) 
+# Public API (called by the router)
 
 
 async def create_pending_scan(
@@ -143,6 +143,43 @@ async def get_scan_detail(
     return {**scan, "images": images}
 
 
+async def delete_user_scan(
+    conn: asyncpg.Connection,
+    scan_id: int,
+    user_id: int,
+) -> None:
+    """Delete a scan owned by *user_id*.
+
+    Raises:
+        HTTPException 404: if the scan does not exist.
+        HTTPException 403: if the scan belongs to a different user.
+        HTTPException 409: if the scan is still ``pending`` (background
+            task is in progress — deleting now would leave an orphaned
+            background task attempting to write to a deleted row).
+    """
+    scan = await dao.get_scan_by_id(conn, scan_id)
+
+    if scan is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Scan not found.",
+        )
+
+    if scan["user_id"] != user_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have access to this scan.",
+        )
+
+    if scan["status"] == "pending":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Cannot delete a scan that is still processing.",
+        )
+
+    await dao.delete_scan(conn, scan_id)
+
+
 # Private helpers
 
 
@@ -174,7 +211,7 @@ async def _fetch_and_extract_images(url: str) -> list[dict]:
     ) as client:
         response = await client.get(url, headers={"User-Agent": _USER_AGENT})
 
-    # Validate response 
+    # Validate response
 
     if response.status_code >= 400:
         raise _ScanError(f"Target server returned HTTP {response.status_code}.")
@@ -186,7 +223,7 @@ async def _fetch_and_extract_images(url: str) -> list[dict]:
     if len(response.content) > _MAX_RESPONSE_BYTES:
         raise _ScanError("Response too large (exceeds 10 MB limit).")
 
-    # Parse and extract 
+    # Parse and extract
 
     soup = BeautifulSoup(response.text, "lxml")
     base_url = str(response.url)

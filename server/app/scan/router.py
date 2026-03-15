@@ -14,6 +14,7 @@ import asyncpg
 from fastapi import APIRouter, BackgroundTasks, Depends, Query, status
 
 from app.auth.dependencies import get_current_user
+from app.auth.schemas import MessageResponse
 from app.db import get_connection, get_pool
 from app.scan import service
 from app.scan.schemas import (
@@ -69,3 +70,17 @@ async def get_scan(
     user: dict = Depends(get_current_user),
 ):
     return await service.get_scan_detail(conn, scan_id, user["id"])
+
+
+@router.delete(
+    "/{scan_id}",
+    response_model=MessageResponse,
+    summary="Delete a scan and its image records",
+)
+async def delete_scan(
+    scan_id: int,
+    conn: asyncpg.Connection = Depends(get_connection),
+    user: dict = Depends(get_current_user),
+):
+    await service.delete_user_scan(conn, scan_id, user["id"])
+    return {"detail": "Scan deleted."}

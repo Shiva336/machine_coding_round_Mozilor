@@ -4,8 +4,8 @@ import {
   useRef,
   useState,
 } from "react";
-import { Link, Outlet, useNavigate, useOutletContext } from "react-router-dom";
-import { getScanHistory, type ScanSummary } from "../api/scan";
+import { Link, Outlet, useNavigate, useOutletContext, useParams } from "react-router-dom";
+import { deleteScan, getScanHistory, type ScanSummary } from "../api/scan";
 import { useAuth } from "../hooks/useAuth";
 import { useHistoryPolling } from "../hooks/useHistoryPolling";
 import ScanHistory from "./ScanHistory";
@@ -16,6 +16,7 @@ import ScanHistory from "./ScanHistory";
 
 export interface AppLayoutContext {
   refreshHistory: () => Promise<boolean>;
+  deleteScan: (scanId: number) => Promise<void>;
 }
 
 // Helpers
@@ -59,6 +60,7 @@ const SIDEBAR_WIDTH = "w-72"; // 288 px
 export default function AppLayout() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const { scanId: activeScanIdParam } = useParams<{ scanId: string }>();
 
   // Sidebar state
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -138,6 +140,25 @@ export default function AppLayout() {
   // the user is not currently viewing.
   useHistoryPolling(history, refreshHistory);
 
+  /**
+   * Delete a scan by id.
+   *
+   * After the API call succeeds:
+   *  - If the user is currently viewing that scan's detail page, navigate
+   *    them to /dashboard so they don't see a stale deleted scan.
+   *  - Reload the sidebar history list (with loading skeleton) so the
+   *    deleted entry is removed immediately.
+   */
+  const handleDeleteScan = useCallback(async (scanId: number) => {
+    await deleteScan(scanId);
+    const viewingDeleted = activeScanIdParam && parseInt(activeScanIdParam, 10) === scanId;
+    if (viewingDeleted) {
+      navigate("/dashboard", { replace: true });
+    }
+    // Reload the current page of history so the row disappears.
+    await loadHistory(historyOffset);
+  }, [activeScanIdParam, navigate, loadHistory, historyOffset]);
+
   // Handlers 
   const handleLogout = async () => {
     await logout();
@@ -177,6 +198,7 @@ export default function AppLayout() {
           offset={historyOffset}
           onPageChange={(newOffset) => setHistoryOffset(newOffset)}
           onNavigate={handleSidebarNavigation}
+          onDelete={handleDeleteScan}
           isLoading={historyLoading}
         />
       </div>
@@ -273,7 +295,7 @@ export default function AppLayout() {
       <div className="pt-14 md:pl-72">
         <main id="main-content" className="min-h-[calc(100vh-3.5rem)] p-4 sm:p-6">
           {/* Outlet receives the refreshHistory callback via context */}
-          <Outlet context={{ refreshHistory } satisfies AppLayoutContext} />
+          <Outlet context={{ refreshHistory, deleteScan: handleDeleteScan } satisfies AppLayoutContext} />
         </main>
       </div>
     </div>
