@@ -7,6 +7,7 @@ import {
 import { Link, Outlet, useNavigate, useOutletContext } from "react-router-dom";
 import { getScanHistory, type ScanSummary } from "../api/scan";
 import { useAuth } from "../hooks/useAuth";
+import { useHistoryPolling } from "../hooks/useHistoryPolling";
 import ScanHistory from "./ScanHistory";
 
 // Outlet context type
@@ -14,7 +15,24 @@ import ScanHistory from "./ScanHistory";
 // useOutletContext() so they can trigger a history refresh.
 
 export interface AppLayoutContext {
-  refreshHistory: () => void;
+  refreshHistory: () => Promise<boolean>;
+}
+
+// Helpers
+
+/**
+ * Returns true only if any scan's id or status has changed between two lists.
+ * Used by refreshHistory to skip a React state update when nothing relevant
+ * changed, preventing unnecessary sidebar re-renders.
+ */
+function hasHistoryChanged(prev: ScanSummary[], next: ScanSummary[]): boolean {
+  if (prev.length !== next.length) return true;
+  for (let i = 0; i < prev.length; i++) {
+    if (prev[i].id !== next[i].id || prev[i].status !== next[i].status) {
+      return true;
+    }
+  }
+  return false;
 }
 
 export function useAppLayout() {
@@ -72,6 +90,7 @@ export default function AppLayout() {
   const [historyOffset, setHistoryOffset] = useState(0);
   const [historyLoading, setHistoryLoading] = useState(true);
 
+  // User-initiated fetches (initial load, pagination) — shows loading skeleton.
   const loadHistory = useCallback(async (offset: number) => {
     setHistoryLoading(true);
     try {
@@ -90,9 +109,34 @@ export default function AppLayout() {
     void loadHistory(historyOffset);
   }, [historyOffset, loadHistory]);
 
-  const refreshHistory = useCallback(() => {
-    void loadHistory(historyOffset);
-  }, [historyOffset, loadHistory]);
+  /**
+   * Silent background refresh — used by useHistoryPolling and by child pages
+   * after a scan is created or settles.
+   *
+   * Does NOT show a loading skeleton (background polls must be invisible).
+   * Only updates React state when a scan's id or status has actually changed,
+   * preventing unnecessary sidebar re-renders on no-op polls.
+   *
+   * Returns true on success, false on failure so the polling hook can track
+   * consecutive errors and stop if the server is persistently down.
+   */
+  const refreshHistory = useCallback(async (): Promise<boolean> => {
+    try {
+      const { data } = await getScanHistory(PAGE_SIZE, historyOffset);
+      setHistory((prev) =>
+        hasHistoryChanged(prev, data.scans) ? data.scans : prev,
+      );
+      setHistoryTotal(data.total);
+      return true;
+    } catch {
+      return false;
+    }
+  }, [historyOffset]);
+
+  // While any scan in the list is pending, re-fetch the history list every
+  // 3 seconds so all sidebar status pills stay up to date — even for scans
+  // the user is not currently viewing.
+  useHistoryPolling(history, refreshHistory);
 
   // Handlers 
   const handleLogout = async () => {
