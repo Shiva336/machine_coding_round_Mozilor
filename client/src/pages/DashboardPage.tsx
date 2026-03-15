@@ -67,7 +67,7 @@ export default function DashboardPage() {
 
   // Render
   return (
-    <div className="mx-auto max-w-2xl space-y-4">
+    <div className="mx-auto max-w-5xl space-y-6">
 
       {/* Server-level error banner */}
       {scanError && (
@@ -109,7 +109,7 @@ export default function DashboardPage() {
       {hasCompletedScans && (
         <section
           aria-label="Recent scan results chart"
-          className="rounded-xl bg-white p-5 shadow-sm ring-1 ring-gray-200"
+          className="rounded-xl bg-white p-6 shadow-sm ring-1 ring-gray-200"
         >
           <h2 className="mb-3 text-base font-semibold text-gray-900">
             Recent scans

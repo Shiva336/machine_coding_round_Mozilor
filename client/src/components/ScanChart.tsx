@@ -136,10 +136,10 @@ function HistoryBar({ scans }: { scans: ScanSummary[] }) {
         role="img"
         aria-label="Grouped bar chart comparing images with and without alt text per scan"
       >
-        <ResponsiveContainer width="100%" height={280}>
+        <ResponsiveContainer width="100%" height={380}>
           <BarChart
             data={completed}
-            margin={{ top: 4, right: 8, left: -16, bottom: 24 }}
+            margin={{ top: 8, right: 8, left: -16, bottom: 48 }}
           >
             <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
             <XAxis
@@ -153,6 +153,8 @@ function HistoryBar({ scans }: { scans: ScanSummary[] }) {
             <YAxis tick={{ fontSize: 11, fill: "#4b5563" }} allowDecimals={false} />
             <Tooltip />
             <Legend
+              verticalAlign="top"
+              wrapperStyle={{ paddingBottom: 12 }}
               formatter={(value: string) => (
                 <span className="text-sm text-gray-700">
                   {value === "withAlt" ? "With alt text" : "Missing alt text"}
