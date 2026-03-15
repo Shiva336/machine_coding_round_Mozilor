@@ -1,43 +1,8 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { AxiosError } from "axios";
 import AuthForm from "../components/AuthForm";
 import { useAuth } from "../hooks/useAuth";
-
-/**
- * Extracts a user-friendly error from an Axios error response returned by
- * the FastAPI backend.
- */
-function parseApiError(err: unknown): {
-  serverError: string | null;
-  fieldErrors: Record<string, string>;
-} {
-  if (!(err instanceof AxiosError) || !err.response) {
-    return { serverError: "An unexpected error occurred. Please try again.", fieldErrors: {} };
-  }
-
-  const { status, data } = err.response;
-
-  // 422 – Pydantic validation errors
-  if (status === 422 && Array.isArray(data.detail)) {
-    const fieldErrors: Record<string, string> = {};
-    for (const item of data.detail) {
-      const field = item.loc?.[item.loc.length - 1];
-      if (field && typeof item.msg === "string") {
-        fieldErrors[field] = item.msg.replace(/^Value error,\s*/i, "");
-      }
-    }
-    return { serverError: null, fieldErrors };
-  }
-
-  // Business error (409, etc.)
-  const message =
-    typeof data.detail === "string"
-      ? data.detail
-      : "An unexpected error occurred. Please try again.";
-
-  return { serverError: message, fieldErrors: {} };
-}
+import { parseApiError } from "../utils/parseApiError";
 
 export default function RegisterPage() {
   const { register } = useAuth();
