@@ -80,8 +80,14 @@ api.interceptors.response.use(
       return api(originalRequest);
     } catch (refreshError) {
       processQueue(refreshError);
-      // Server cleared the cookies on failure; redirect to login.
-      window.location.href = "/login";
+      // Only hard-redirect to /login from authenticated pages.
+      // If we're already on /login or /register the redirect would cause
+      // an infinite loop: mount → /me → 401 → /refresh → 401 → redirect
+      // → remount → /me → 401 → ...
+      const path = window.location.pathname;
+      if (path !== "/login" && path !== "/register") {
+        window.location.href = "/login";
+      }
       return Promise.reject(refreshError);
     } finally {
       isRefreshing = false;
