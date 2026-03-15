@@ -10,8 +10,6 @@ interface ScanHistoryProps {
   onPageChange: (newOffset: number) => void;
   /** Called when the user navigates to a scan (e.g. to close mobile drawer). */
   onNavigate?: () => void;
-  /** Called when the user confirms deletion of a scan. */
-  onDelete: (scanId: number) => void;
   isLoading: boolean;
 }
 
@@ -40,7 +38,6 @@ export default function ScanHistory({
   offset,
   onPageChange,
   onNavigate,
-  onDelete,
   isLoading,
 }: ScanHistoryProps) {
   const { scanId } = useParams<{ scanId: string }>();
@@ -73,92 +70,60 @@ export default function ScanHistory({
         {scans.map((scan) => {
           const isActive = scan.id === activeScanId;
           return (
-      <li key={scan.id}>
-              <div className="group relative flex items-stretch">
-                <Link
-                  to={`/scans/${scan.id}`}
-                  onClick={onNavigate}
-                  aria-current={isActive ? "page" : undefined}
-                  aria-label={`${
-                    scan.status === "pending"
-                      ? "Scanning"
-                      : scan.status === "completed"
-                        ? "Completed scan of"
-                        : "Failed scan of"
-                  } ${scan.url}${
-                    scan.status === "completed"
-                      ? `, ${scan.total_images} images, ${scan.images_with_alt} with alt text`
-                      : ""
+            <li key={scan.id}>
+              <Link
+                to={`/scans/${scan.id}`}
+                onClick={onNavigate}
+                aria-current={isActive ? "page" : undefined}
+                aria-label={`${
+                  scan.status === "pending"
+                    ? "Scanning"
+                    : scan.status === "completed"
+                      ? "Completed scan of"
+                      : "Failed scan of"
+                } ${scan.url}${
+                  scan.status === "completed"
+                    ? `, ${scan.total_images} images, ${scan.images_with_alt} with alt text`
+                    : ""
+                }`}
+                className={`block rounded-lg px-3 py-2.5 transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-1 ${
+                  isActive
+                    ? "bg-indigo-50 ring-1 ring-indigo-200"
+                    : "hover:bg-gray-100"
+                }`}
+              >
+                {/* URL */}
+                <p
+                  className={`truncate text-xs font-medium ${
+                    isActive ? "text-indigo-700" : "text-gray-800"
                   }`}
-                  className={`min-w-0 flex-1 rounded-lg px-3 py-2.5 text-left transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-1 ${
-                    isActive
-                      ? "bg-indigo-50 ring-1 ring-indigo-200"
-                      : "hover:bg-gray-100"
-                  }`}
+                  title={scan.url}
                 >
-                  {/* URL */}
-                  <p
-                    className={`truncate text-xs font-medium ${
-                      isActive ? "text-indigo-700" : "text-gray-800"
-                    }`}
-                    title={scan.url}
-                  >
-                    {scan.url}
-                  </p>
+                  {scan.url}
+                </p>
 
-                  {/* Date + status */}
-                  <div className="mt-1 flex items-center justify-between gap-2">
-                    <span className="text-xs text-gray-500">
-                      {formatDate(scan.scanned_at)}
+                {/* Date + status */}
+                <div className="mt-1 flex items-center justify-between gap-2">
+                  <span className="text-xs text-gray-500">
+                    {formatDate(scan.scanned_at)}
+                  </span>
+                  <StatusPill status={scan.status} />
+                </div>
+
+                {/* Image counts — completed only */}
+                {scan.status === "completed" && (
+                  <p className="mt-0.5 text-xs text-gray-500">
+                    <span className="font-medium text-emerald-600">
+                      {scan.images_with_alt}
                     </span>
-                    <StatusPill status={scan.status} />
-                  </div>
-
-                  {/* Image counts — completed only */}
-                  {scan.status === "completed" && (
-                    <p className="mt-0.5 text-xs text-gray-500">
-                      <span className="font-medium text-emerald-600">
-                        {scan.images_with_alt}
-                      </span>
-                      {" / "}
-                      <span className="font-medium text-gray-600">
-                        {scan.total_images}
-                      </span>{" "}
-                      with alt
-                    </p>
-                  )}
-                </Link>
-
-                {/* Delete button — hidden for pending scans */}
-                {scan.status !== "pending" && (
-                  <button
-                    type="button"
-                    aria-label={`Delete scan of ${scan.url}`}
-                    onClick={(e) => {
-                      e.preventDefault();
-                      if (window.confirm("Delete this scan? This cannot be undone.")) {
-                        onDelete(scan.id);
-                      }
-                    }}
-                    className="ml-1 flex shrink-0 items-center self-stretch rounded-lg px-1.5 text-gray-400 opacity-0 transition-opacity hover:bg-red-50 hover:text-red-600 focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-red-400 group-hover:opacity-100"
-                  >
-                    <svg
-                      aria-hidden="true"
-                      className="h-3.5 w-3.5"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth={2}
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0"
-                      />
-                    </svg>
-                  </button>
+                    {" / "}
+                    <span className="font-medium text-gray-600">
+                      {scan.total_images}
+                    </span>{" "}
+                    with alt
+                  </p>
                 )}
-              </div>
+              </Link>
             </li>
           );
         })}

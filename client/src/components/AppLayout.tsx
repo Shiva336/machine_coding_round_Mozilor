@@ -198,7 +198,6 @@ export default function AppLayout() {
           offset={historyOffset}
           onPageChange={(newOffset) => setHistoryOffset(newOffset)}
           onNavigate={handleSidebarNavigation}
-          onDelete={handleDeleteScan}
           isLoading={historyLoading}
         />
       </div>
