@@ -82,6 +82,7 @@ HTTP Request
 - **Background task processing.** `POST /api/scans` creates a `pending` row synchronously and returns immediately (201). The actual URL fetch + parse runs as a FastAPI `BackgroundTask` after the response is sent, acquiring its own DB connection from the pool.
 - **Refresh token rotation.** Every use of a refresh token issues a new pair and revokes the old one. If a revoked token is reused (replay attack), all of that user's refresh tokens are wiped.
 - **Dependency injection.** Database connections flow through `Depends(get_connection)`. The `get_current_user` dependency validates the access token cookie and returns the user dict — any route can declare it and be protected.
+- **SSRF protection.** Before fetching any user-submitted URL, the scan service resolves the hostname to its IP address(es) via `socket.getaddrinfo` and rejects anything that resolves to a loopback (127.0.0.0/8, ::1), private RFC-1918 range (10.x, 172.16–31.x, 192.168.x), link-local address (169.254.x.x — AWS/GCP metadata endpoints), or multicast/unspecified address. Blocked attempts are logged at `WARNING` level.
 
 ### Frontend — Component Architecture
 
@@ -102,6 +103,29 @@ src/
 - **No token in JS.** With HttpOnly cookies the client cannot inspect tokens. On mount, `AuthContext` always calls `GET /api/auth/me` as the sole source of truth for session state.
 - **Polling with `setTimeout` chains.** Rather than `setInterval`, each poll tick schedules the next one only after the previous fetch completes — preventing overlapping requests under slow networks.
 - **Silent history refresh.** `AppLayout` compares only `id` and `status` between polls — if nothing changed, `setState` is skipped entirely, preventing unnecessary sidebar re-renders.
+
+---
+
+## Security
+
+| Area | Measure |
+|---|---|
+| Token storage | HttpOnly cookies — JavaScript cannot read tokens, eliminating XSS token theft |
+| Token lifetime | Access token: 30 min. Refresh token: 7 days, single-use with rotation |
+| Replay attacks | Revoked token reuse triggers immediate revocation of all sessions for that user (logged CRITICAL) |
+| Password hashing | bcrypt with automatic salting |
+| Password policy | Min 8 chars, uppercase, lowercase, digit, special character — enforced at registration |
+| SSRF | Every user-submitted URL is resolved to its IP before fetching; loopback, private RFC-1918, link-local (169.254.x.x), and multicast addresses are blocked |
+| Cookie flags | `HttpOnly`, `SameSite=Lax`, `Secure` (production), scoped `Path` (`/api/auth` for refresh token) |
+| Cookie deletion | Logout passes all original cookie attributes to `delete_cookie` so browsers reliably expire them under HTTPS |
+| SQL injection | All queries use asyncpg parameterised placeholders (`$1, $2`) — no string interpolation |
+| Access control | Scan endpoints verify ownership; returning another user's scan returns 403 |
+| Logging | SSRF attempts → WARNING, unauthorised access → WARNING, token reuse → CRITICAL, every request → structured JSON with `request_id` |
+
+### Known limitations
+
+- No per-user submission rate limiting (unlimited concurrent scans per user).
+- HTTP responses are fully buffered before the 10 MB size check is applied (a slow server can send up to 10 MB before being cut off).
 
 ---
 
@@ -142,6 +166,8 @@ src/
 │       ├── config.py                # Centralised settings via pydantic-settings (reads .env)
 │       ├── db.py                    # asyncpg pool lifecycle + get_connection Depends()
 │       ├── schema.sql               # All table definitions, run on startup (idempotent)
+│       ├── logging_config.py        # Centralised logging setup: JSON request/response logs, human-readable app logs
+│       ├── middleware.py            # RequestLoggingMiddleware — every request logged with timing and unique request_id
 │       │
 │       ├── auth/                    # Authentication module
 │       │   ├── router.py            # POST /register /login /refresh /logout, GET /me
