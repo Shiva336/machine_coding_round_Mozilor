@@ -25,7 +25,7 @@ Cookie strategy
 import asyncpg
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 
-from app.auth import service
+from app.auth.service import auth_service
 from app.auth.dependencies import get_current_user
 from app.auth.schemas import (
     AuthResponse,
@@ -109,7 +109,7 @@ async def register(
     response: Response,
     conn: asyncpg.Connection = Depends(get_connection),
 ):
-    result = await service.register_user(conn, body.email, body.password)
+    result = await auth_service.register_user(conn, body.email, body.password)
     _set_auth_cookies(
         response, result["tokens"]["access_token"], result["tokens"]["refresh_token"]
     )
@@ -126,7 +126,7 @@ async def login(
     response: Response,
     conn: asyncpg.Connection = Depends(get_connection),
 ):
-    result = await service.login_user(conn, body.email, body.password)
+    result = await auth_service.login_user(conn, body.email, body.password)
     _set_auth_cookies(
         response, result["tokens"]["access_token"], result["tokens"]["refresh_token"]
     )
@@ -149,7 +149,7 @@ async def refresh(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Refresh token missing.",
         )
-    tokens = await service.refresh_access_token(conn, refresh_token)
+    tokens = await auth_service.refresh_access_token(conn, refresh_token)
     _set_auth_cookies(response, tokens["access_token"], tokens["refresh_token"])
     return {"detail": "Token refreshed."}
 
@@ -167,7 +167,7 @@ async def logout(
 ):
     refresh_token = request.cookies.get("refresh_token")
     if refresh_token:
-        await service.logout_user(conn, refresh_token)
+        await auth_service.logout_user(conn, refresh_token)
     _clear_auth_cookies(response)
     return {"detail": "Successfully logged out."}
 
