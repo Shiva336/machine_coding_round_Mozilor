@@ -196,23 +196,3 @@ async def logout_user(conn: asyncpg.Connection, refresh_token_str: str) -> None:
         logger.info("User logged out: user_id=%s jti=%s", user_id, jti)
     else:
         logger.debug("Logout token had no jti claim — nothing to revoke.")
-
-
-async def get_current_user_profile(conn: asyncpg.Connection, user_id: int) -> dict:
-    """Return the public profile of the user identified by *user_id*.
-
-    Raises:
-        HTTPException 401: if the user no longer exists (e.g. deleted
-        after the token was issued).
-    """
-    user = await dao.find_user_by_id(conn, user_id)
-    if user is None:
-        logger.warning(
-            "Profile requested for non-existent user_id=%d (deleted after token issued?)",
-            user_id,
-        )
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not found.",
-        )
-    return user

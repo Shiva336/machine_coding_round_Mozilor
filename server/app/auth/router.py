@@ -3,7 +3,7 @@ Auth router – thin HTTP layer.
 
 Each endpoint:
   - Deserialises the request body via Pydantic schemas.
-  - Receives a database connection via ``Depends(get_connection)``.
+  - Receives a database connection via ``Depends(get_connection)`` where needed.
   - Delegates **all** business logic to ``service.py``.
   - Sets / clears HttpOnly cookies instead of returning tokens in the body.
 
@@ -72,9 +72,27 @@ def _set_auth_cookies(
 
 
 def _clear_auth_cookies(response: Response) -> None:
-    """Expire both token cookies on *response*."""
-    response.delete_cookie(key="access_token", path="/")
-    response.delete_cookie(key="refresh_token", path="/api/auth")
+    """Expire both token cookies on *response*.
+
+    The attributes (httponly, secure, samesite) must match the original
+    Set-Cookie headers exactly.  Without them, some browsers (especially on
+    HTTPS with the Secure flag) will not honour the Max-Age=0 expiry and the
+    cookies will persist until they naturally expire.
+    """
+    response.delete_cookie(
+        key="access_token",
+        path="/",
+        httponly=settings.cookie_httponly,
+        secure=settings.cookie_secure,
+        samesite=settings.cookie_samesite,
+    )
+    response.delete_cookie(
+        key="refresh_token",
+        path="/api/auth",
+        httponly=settings.cookie_httponly,
+        secure=settings.cookie_secure,
+        samesite=settings.cookie_samesite,
+    )
 
 
 # Endpoints
@@ -159,8 +177,10 @@ async def logout(
     response_model=UserResponse,
     summary="Get the current authenticated user",
 )
-async def me(
-    user: dict = Depends(get_current_user),
-    conn: asyncpg.Connection = Depends(get_connection),
-):
-    return await service.get_current_user_profile(conn, user["id"])
+async def me(user: dict = Depends(get_current_user)):
+    """Return the authenticated user's profile.
+
+    The user dict is already fetched from the database by the
+    ``get_current_user`` dependency — no second query needed.
+    """
+    return user

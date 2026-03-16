@@ -17,8 +17,10 @@ execute, it receives the **pool** and acquires its own connection.
 
 from __future__ import annotations
 
+import ipaddress
 import logging
-from urllib.parse import urljoin
+import socket
+from urllib.parse import urlparse, urljoin
 
 import asyncpg
 import httpx
@@ -105,9 +107,11 @@ async def process_scan(pool: asyncpg.Pool, scan_id: int, url: str) -> None:
         await _fail_scan(pool, scan_id, url, "Too many redirects while fetching URL.")
     except _ScanError as exc:
         await _fail_scan(pool, scan_id, url, str(exc))
-    except Exception as exc:
+    except Exception:
         logger.exception("Unexpected error processing scan_id=%d url=%s", scan_id, url)
-        await _fail_scan(pool, scan_id, url, f"Scan failed: {exc}")
+        await _fail_scan(
+            pool, scan_id, url, "An internal error occurred during the scan."
+        )
 
 
 async def get_user_scans(
@@ -231,6 +235,59 @@ class _ScanError(Exception):
     """Raised for expected scraping failures (bad status, non-HTML, etc.)."""
 
 
+def _validate_url_for_ssrf(url: str) -> None:
+    """Reject URLs that would cause the server to contact internal resources.
+
+    Blocks:
+    - Non-HTTP(S) schemes (file://, ftp://, etc.)
+    - Loopback addresses (127.0.0.0/8, ::1)
+    - Private RFC-1918 ranges (10.x, 172.16–31.x, 192.168.x)
+    - Link-local / APIPA addresses (169.254.x.x — AWS/GCP metadata)
+    - Multicast and "unspecified" addresses
+
+    Raises:
+        _ScanError: with a user-facing message if the URL is unsafe.
+    """
+    try:
+        parsed = urlparse(url)
+    except Exception:
+        raise _ScanError("Invalid URL format.")
+
+    if parsed.scheme not in ("http", "https"):
+        raise _ScanError("Only HTTP and HTTPS URLs are supported.")
+
+    hostname = parsed.hostname
+    if not hostname:
+        raise _ScanError("URL has no hostname.")
+
+    # Resolve hostname → IP address.
+    # This catches "localhost", "localtest.me", split-horizon DNS tricks, etc.
+    try:
+        # getaddrinfo returns the first routable address; we check them all.
+        addr_infos = socket.getaddrinfo(hostname, None)
+    except socket.gaierror:
+        raise _ScanError(f"Could not resolve hostname '{hostname}'.")
+
+    for _, _, _, _, sockaddr in addr_infos:
+        raw_ip = sockaddr[0]
+        try:
+            ip = ipaddress.ip_address(raw_ip)
+        except ValueError:
+            continue
+
+        if (
+            ip.is_loopback
+            or ip.is_private
+            or ip.is_link_local
+            or ip.is_multicast
+            or ip.is_unspecified
+        ):
+            logger.warning("SSRF blocked: url=%s resolved_ip=%s", url, raw_ip)
+            raise _ScanError(
+                "Scanning private, loopback, or link-local addresses is not allowed."
+            )
+
+
 async def _fail_scan(pool: asyncpg.Pool, scan_id: int, url: str, message: str) -> None:
     """Mark a scan as failed.  Used by ``process_scan`` error handlers."""
     logger.warning("Scan failed: scan_id=%d url=%s reason=%s", scan_id, url, message)
@@ -249,6 +306,8 @@ async def _fetch_and_extract_images(url: str) -> list[dict]:
         httpx.*: on network-level failures (propagated to caller).
     """
     logger.debug("Fetching URL: %s", url)
+
+    _validate_url_for_ssrf(url)
 
     async with httpx.AsyncClient(
         timeout=_HTTPX_TIMEOUT,
