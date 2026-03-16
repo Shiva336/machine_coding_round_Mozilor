@@ -16,7 +16,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, Query, status
 from app.auth.dependencies import get_current_user
 from app.auth.schemas import MessageResponse
 from app.db import get_connection, get_pool
-from app.scan import service
+from app.scan.service import scan_service
 from app.scan.schemas import (
     ScanHistoryResponse,
     ScanRequest,
@@ -40,8 +40,10 @@ async def create_scan(
     pool: asyncpg.Pool = Depends(get_pool),
     user: dict = Depends(get_current_user),
 ):
-    scan = await service.create_pending_scan(conn, str(body.url), user["id"])
-    background_tasks.add_task(service.process_scan, pool, scan["id"], str(body.url))
+    scan = await scan_service.create_pending_scan(conn, str(body.url), user["id"])
+    background_tasks.add_task(
+        scan_service.process_scan, pool, scan["id"], str(body.url)
+    )
     return scan
 
 
@@ -56,7 +58,7 @@ async def list_scans(
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
 ):
-    return await service.get_user_scans(conn, user["id"], limit, offset)
+    return await scan_service.get_user_scans(conn, user["id"], limit, offset)
 
 
 @router.get(
@@ -69,7 +71,7 @@ async def get_scan(
     conn: asyncpg.Connection = Depends(get_connection),
     user: dict = Depends(get_current_user),
 ):
-    return await service.get_scan_detail(conn, scan_id, user["id"])
+    return await scan_service.get_scan_detail(conn, scan_id, user["id"])
 
 
 @router.delete(
@@ -82,5 +84,5 @@ async def delete_scan(
     conn: asyncpg.Connection = Depends(get_connection),
     user: dict = Depends(get_current_user),
 ):
-    await service.delete_user_scan(conn, scan_id, user["id"])
+    await scan_service.delete_user_scan(conn, scan_id, user["id"])
     return {"detail": "Scan deleted."}

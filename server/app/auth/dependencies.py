@@ -20,7 +20,7 @@ import asyncpg
 import jwt
 from fastapi import Depends, HTTPException, Request, status
 
-from app.auth import dao
+from app.auth.dao import auth_dao
 from app.auth.security import decode_token
 from app.db import get_connection
 
@@ -86,7 +86,7 @@ async def get_current_user(
         )
 
     user_id = int(payload["sub"])
-    user = await dao.find_user_by_id(conn, user_id)
+    user = await auth_dao.find_user_by_id(conn, user_id)
 
     if user is None:
         logger.warning(
