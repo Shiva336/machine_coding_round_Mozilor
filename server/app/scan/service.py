@@ -50,7 +50,14 @@ async def create_pending_scan(
     This is called synchronously during the request.  The actual
     scraping happens in :func:`process_scan` as a background task.
     """
-    return await dao.insert_scan(conn, user_id, url)
+    scan = await dao.insert_scan(conn, user_id, url)
+    logger.info(
+        "Scan created: scan_id=%d user_id=%d url=%s",
+        scan["id"],
+        user_id,
+        url,
+    )
+    return scan
 
 
 async def process_scan(pool: asyncpg.Pool, scan_id: int, url: str) -> None:
@@ -64,6 +71,8 @@ async def process_scan(pool: asyncpg.Pool, scan_id: int, url: str) -> None:
     image counts, and individual image rows are inserted.  On failure
     the scan is marked ``status='failed'`` with an error message.
     """
+    logger.info("Background scan started: scan_id=%d url=%s", scan_id, url)
+
     try:
         images = await _fetch_and_extract_images(url)
 
@@ -79,24 +88,26 @@ async def process_scan(pool: asyncpg.Pool, scan_id: int, url: str) -> None:
                 await dao.insert_scan_images(conn, scan_id, images)
 
         logger.info(
-            "Scan %d completed: %d images (%d with alt, %d without)",
+            "Scan completed: scan_id=%d url=%s total_images=%d "
+            "with_alt=%d without_alt=%d",
             scan_id,
+            url,
             total,
             with_alt,
             without_alt,
         )
 
     except httpx.TimeoutException:
-        await _fail_scan(pool, scan_id, "Target URL timed out.")
+        await _fail_scan(pool, scan_id, url, "Target URL timed out.")
     except httpx.ConnectError:
-        await _fail_scan(pool, scan_id, "Could not connect to the target URL.")
+        await _fail_scan(pool, scan_id, url, "Could not connect to the target URL.")
     except httpx.TooManyRedirects:
-        await _fail_scan(pool, scan_id, "Too many redirects while fetching URL.")
+        await _fail_scan(pool, scan_id, url, "Too many redirects while fetching URL.")
     except _ScanError as exc:
-        await _fail_scan(pool, scan_id, str(exc))
+        await _fail_scan(pool, scan_id, url, str(exc))
     except Exception as exc:
-        logger.exception("Unexpected error processing scan %d", scan_id)
-        await _fail_scan(pool, scan_id, f"Scan failed: {exc}")
+        logger.exception("Unexpected error processing scan_id=%d url=%s", scan_id, url)
+        await _fail_scan(pool, scan_id, url, f"Scan failed: {exc}")
 
 
 async def get_user_scans(
@@ -125,12 +136,23 @@ async def get_scan_detail(
     scan = await dao.get_scan_by_id(conn, scan_id)
 
     if scan is None:
+        logger.warning(
+            "Scan not found: scan_id=%d requested_by=user_id=%d",
+            scan_id,
+            user_id,
+        )
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Scan not found.",
         )
 
     if scan["user_id"] != user_id:
+        logger.warning(
+            "Unauthorised scan access: scan_id=%d owner_id=%d requester_id=%d",
+            scan_id,
+            scan["user_id"],
+            user_id,
+        )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You do not have access to this scan.",
@@ -160,24 +182,46 @@ async def delete_user_scan(
     scan = await dao.get_scan_by_id(conn, scan_id)
 
     if scan is None:
+        logger.warning(
+            "Delete attempted on non-existent scan: scan_id=%d user_id=%d",
+            scan_id,
+            user_id,
+        )
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Scan not found.",
         )
 
     if scan["user_id"] != user_id:
+        logger.warning(
+            "Unauthorised scan deletion attempt: scan_id=%d owner_id=%d requester_id=%d",
+            scan_id,
+            scan["user_id"],
+            user_id,
+        )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You do not have access to this scan.",
         )
 
     if scan["status"] == "pending":
+        logger.warning(
+            "Attempted to delete pending scan: scan_id=%d user_id=%d",
+            scan_id,
+            user_id,
+        )
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Cannot delete a scan that is still processing.",
         )
 
     await dao.delete_scan(conn, scan_id)
+    logger.info(
+        "Scan deleted: scan_id=%d user_id=%d url=%s",
+        scan_id,
+        user_id,
+        scan["url"],
+    )
 
 
 # Private helpers
@@ -187,9 +231,9 @@ class _ScanError(Exception):
     """Raised for expected scraping failures (bad status, non-HTML, etc.)."""
 
 
-async def _fail_scan(pool: asyncpg.Pool, scan_id: int, message: str) -> None:
+async def _fail_scan(pool: asyncpg.Pool, scan_id: int, url: str, message: str) -> None:
     """Mark a scan as failed.  Used by ``process_scan`` error handlers."""
-    logger.warning("Scan %d failed: %s", scan_id, message)
+    logger.warning("Scan failed: scan_id=%d url=%s reason=%s", scan_id, url, message)
     async with pool.acquire() as conn:
         await dao.update_scan_failed(conn, scan_id, message)
 
@@ -204,12 +248,21 @@ async def _fetch_and_extract_images(url: str) -> list[dict]:
         _ScanError: on non-2xx responses or non-HTML content types.
         httpx.*: on network-level failures (propagated to caller).
     """
+    logger.debug("Fetching URL: %s", url)
+
     async with httpx.AsyncClient(
         timeout=_HTTPX_TIMEOUT,
         follow_redirects=True,
         max_redirects=_MAX_REDIRECTS,
     ) as client:
         response = await client.get(url, headers={"User-Agent": _USER_AGENT})
+
+    logger.debug(
+        "Fetch complete: url=%s status=%d content_length=%d",
+        url,
+        response.status_code,
+        len(response.content),
+    )
 
     # Validate response
 
@@ -239,4 +292,5 @@ async def _fetch_and_extract_images(url: str) -> list[dict]:
 
         images.append({"src": src, "alt": alt, "has_alt": has_alt})
 
+    logger.debug("Parsed %d image(s) from %s", len(images), url)
     return images

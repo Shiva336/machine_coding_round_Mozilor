@@ -1,3 +1,4 @@
+import logging
 from collections.abc import AsyncGenerator
 from pathlib import Path
 
@@ -5,6 +6,8 @@ import asyncpg
 from fastapi import Depends
 
 from app.config import settings
+
+logger = logging.getLogger(__name__)
 
 _pool: asyncpg.Pool | None = None
 
@@ -34,20 +37,38 @@ async def get_connection(
 async def init_db() -> None:
     """Create the connection pool and run schema.sql to ensure tables exist."""
     global _pool
+
+    logger.info(
+        "Creating asyncpg connection pool: host=%s port=%s db=%s min_size=5 max_size=20",
+        settings.postgres_host,
+        settings.postgres_port,
+        settings.postgres_db,
+    )
+
     _pool = await asyncpg.create_pool(
         dsn=settings.database_url, min_size=5, max_size=20
     )
 
+    logger.info("Connection pool created successfully.")
+
     schema_path = Path(__file__).parent / "schema.sql"
+    logger.info("Applying database schema from: %s", schema_path.name)
+
     schema_sql = schema_path.read_text()
 
     async with _pool.acquire() as conn:
         await conn.execute(schema_sql)
+
+    logger.info("Database schema applied successfully.")
 
 
 async def close_db() -> None:
     """Gracefully close the connection pool."""
     global _pool
     if _pool is not None:
+        logger.info("Closing database connection pool...")
         await _pool.close()
         _pool = None
+        logger.info("Database connection pool closed.")
+    else:
+        logger.warning("close_db() called but pool was already None.")

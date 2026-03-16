@@ -14,6 +14,8 @@ exclusively in HttpOnly cookies that JavaScript cannot read, eliminating
 the XSS token-theft vector.
 """
 
+import logging
+
 import asyncpg
 import jwt
 from fastapi import Depends, HTTPException, Request, status
@@ -21,6 +23,8 @@ from fastapi import Depends, HTTPException, Request, status
 from app.auth import dao
 from app.auth.security import decode_token
 from app.db import get_connection
+
+logger = logging.getLogger(__name__)
 
 
 async def get_current_user(
@@ -36,6 +40,11 @@ async def get_current_user(
     token = request.cookies.get("access_token")
 
     if not token:
+        logger.debug(
+            "Unauthenticated request — access_token cookie missing: %s %s",
+            request.method,
+            request.url.path,
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Not authenticated.",
@@ -44,17 +53,33 @@ async def get_current_user(
     try:
         payload = decode_token(token)
     except jwt.ExpiredSignatureError:
+        logger.warning(
+            "Expired access token on %s %s",
+            request.method,
+            request.url.path,
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Access token has expired.",
         )
     except jwt.InvalidTokenError:
+        logger.warning(
+            "Invalid access token on %s %s",
+            request.method,
+            request.url.path,
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid access token.",
         )
 
     if payload.get("type") != "access":
+        logger.warning(
+            "Wrong token type '%s' used as access token on %s %s",
+            payload.get("type"),
+            request.method,
+            request.url.path,
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid token type.",
@@ -64,6 +89,12 @@ async def get_current_user(
     user = await dao.find_user_by_id(conn, user_id)
 
     if user is None:
+        logger.warning(
+            "Access token references non-existent user_id=%d on %s %s",
+            user_id,
+            request.method,
+            request.url.path,
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User not found.",
